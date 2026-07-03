@@ -7,14 +7,15 @@ import { AnalysisResultView } from './components/AnalysisResultView';
 import { ImagePreview } from './components/ImagePreview';
 import { ApiSettingsModal } from './components/ApiSettingsModal';
 import { GeneratedImageDisplay } from './components/GeneratedImageDisplay';
-import { UploadedImage, PromptSettings, STYLE_TEMPLATES, DETAIL_LEVEL_MAP } from './types';
+import { HistoryPanel } from './components/HistoryPanel';
+import { UploadedImage, PromptSettings, STYLE_TEMPLATES, DETAIL_LEVEL_MAP, HistoryItem } from './types';
 import { analyzeImage } from './utils/analysis';
 import { generateGeminiPrompt } from './services/geminiService';
 import { generateOpenAIPrompt } from './services/openaiService';
 import { generateDeepseekPrompt } from './services/deepseekService';
 import { generateImage } from './services/imageGenService';
 import { classifyImageMobileNet } from './services/tfService';
-import { AlertCircle, Brain, Bot, Zap, Globe } from 'lucide-react';
+import { AlertCircle, Brain, Bot, Zap, Globe, History } from 'lucide-react';
 
 const convertAvifToJpeg = (file: File): Promise<{ file: File, previewUrl: string, base64: string, mimeType: string }> => {
     return new Promise((resolve, reject) => {
@@ -69,6 +70,23 @@ const convertAvifToJpeg = (file: File): Promise<{ file: File, previewUrl: string
     });
 };
 
+const base64StringToFile = (base64String: string, filename: string, mimeType: string): File => {
+    const byteCharacters = atob(base64String);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+    const blob = new Blob(byteArrays, { type: mimeType });
+    return new File([blob], filename, { type: mimeType });
+};
+
+
 const App: React.FC = () => {
     const [images, setImages] = useState<UploadedImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -84,6 +102,8 @@ const App: React.FC = () => {
     const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [history, setHistory] = useState<HistoryItem[]>([]);
     
     const [openAIKey, setOpenAIKey] = useState<string>(localStorage.getItem('openai_api_key') || '');
     const [deepseekKey, setDeepseekKey] = useState<string>(localStorage.getItem('deepseek_api_key') || '');
@@ -100,8 +120,73 @@ const App: React.FC = () => {
         targetPlatform: 'midjourney',
         extraParams: '',
         mode: 'general',
-        activeTemplateId: ''
+        activeTemplateId: '',
+        shadowOpacity: 100
     });
+
+    useEffect(() => {
+        try {
+            const savedHistory = localStorage.getItem('promptHistory');
+            if (savedHistory) {
+                setHistory(JSON.parse(savedHistory));
+            }
+        } catch (error) {
+            console.error("Failed to load history from localStorage", error);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('promptHistory', JSON.stringify(history));
+        } catch (error) {
+            console.error("Failed to save history to localStorage", error);
+        }
+    }, [history]);
+
+    const addToHistory = (item: Omit<HistoryItem, 'id' | 'timestamp'>) => {
+        const newItem: HistoryItem = {
+            ...item,
+            id: Date.now().toString(),
+            timestamp: Date.now()
+        };
+        setHistory(prev => [newItem, ...prev].slice(0, 50)); // Keep max 50 items
+    };
+
+    const handleRevisitHistory = async (id: string) => {
+        const item = history.find(h => h.id === id);
+        if (!item) return;
+
+        const file = base64StringToFile(item.baseImage.base64Data, item.baseImage.name, item.baseImage.mimeType);
+        const previewUrl = URL.createObjectURL(file);
+        
+        const newImage: UploadedImage = {
+            id: `history-${item.id}`, file, previewUrl, name: file.name, analysis: null,
+            base64Data: item.baseImage.base64Data, mimeType: item.baseImage.mimeType,
+        };
+        setImages([newImage]);
+        setSelectedImageId(newImage.id);
+
+        try {
+            const analysis = await analyzeImage(file);
+            setImages(prev => prev.map(img => img.id === newImage.id ? { ...img, analysis } : img));
+        } catch (err) {
+            console.error("Failed to re-analyze history image", err);
+        }
+
+        setSettings(item.settings);
+        setPrompt(item.prompt);
+        setGeneratedImageUrl(item.generatedImageUrl);
+        setIsHistoryOpen(false);
+    };
+
+    const handleDeleteHistory = (id: string) => {
+        setHistory(prev => prev.filter(item => item.id !== id));
+    };
+
+    const handleClearHistory = () => {
+        setHistory([]);
+    };
+
 
     const saveApiKeys = (newOpenAIKey: string, newDeepseekKey: string) => {
         setOpenAIKey(newOpenAIKey);
@@ -115,8 +200,19 @@ const App: React.FC = () => {
 
     const handleFilesSelected = async (files: File[]) => {
         setError(null);
-        const originalFile = files[0];
+        let originalFile = files[0];
         if (!originalFile) return;
+
+        const MAX_SIZE_MB = 20;
+        if (originalFile.size > MAX_SIZE_MB * 1024 * 1024) {
+            setError(`File is too large. Maximum size is ${MAX_SIZE_MB}MB.`);
+            return;
+        }
+
+        // Handle JIFF files that might not have a correct MIME type by treating them as JPEG
+        if (originalFile.name.toLowerCase().endsWith('.jiff') && !originalFile.type.startsWith('image/')) {
+            originalFile = new File([originalFile], originalFile.name, { type: 'image/jpeg' });
+        }
 
         if (activeImage) {
             URL.revokeObjectURL(activeImage.previewUrl);
@@ -255,6 +351,20 @@ const App: React.FC = () => {
             const imageContext = activeImage?.base64Data ? { base64: activeImage.base64Data, mimeType: activeImage.mimeType! } : undefined;
             const url = await generateImage(prompt, false, imageContext);
             setGeneratedImageUrl(url);
+            
+            if (activeImage?.base64Data && activeImage.mimeType) {
+                addToHistory({
+                    prompt,
+                    generatedImageUrl: url,
+                    baseImage: {
+                        base64Data: activeImage.base64Data,
+                        mimeType: activeImage.mimeType,
+                        name: activeImage.name,
+                    },
+                    settings,
+                });
+            }
+
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -282,6 +392,11 @@ const App: React.FC = () => {
         
         const detailInfo = DETAIL_LEVEL_MAP[settings.detailLevel === 'auto' ? 5 : settings.detailLevel];
         p += `, ${detailInfo.keywords.join(", ")}`;
+
+        // Shadow settings
+        if (settings.shadowOpacity !== 100) {
+            p += `, shadow intensity ${settings.shadowOpacity}%`;
+        }
         
         if (settings.removeBackground || settings.mode === 'mockup') {
             p += ", clean isolated background";
@@ -306,6 +421,13 @@ const App: React.FC = () => {
                         <div className="bg-gradient-to-br from-blue-500 to-violet-600 p-2 rounded-lg"><Zap size={24} /></div>
                         <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400">Visual Prompt Architect</h1>
                     </div>
+                    <button 
+                        onClick={() => setIsHistoryOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors"
+                        title="View History"
+                    >
+                        <History size={16} />
+                    </button>
                 </div>
             </header>
 
@@ -369,6 +491,14 @@ const App: React.FC = () => {
             </main>
             
             <ApiSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onSave={saveApiKeys} initialOpenAIKey={openAIKey} initialDeepseekKey={deepseekKey} />
+            <HistoryPanel 
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+                history={history}
+                onRevisit={handleRevisitHistory}
+                onDelete={handleDeleteHistory}
+                onClear={handleClearHistory}
+            />
         </div>
     );
 };

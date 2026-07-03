@@ -23,7 +23,9 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragOver(false);
-        const files = (Array.from(e.dataTransfer.files) as File[]).filter(file => file.type.startsWith('image/'));
+        const files = (Array.from(e.dataTransfer.files) as File[]).filter(file => 
+            file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.jiff')
+        );
         if (files.length > 0) {
             onFilesSelected(files);
         }
@@ -52,7 +54,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
                 type="file" 
                 ref={fileInputRef}
                 className="hidden" 
-                accept="image/*" 
+                accept="image/jpeg,image/png,image/webp,image/avif,.jiff" 
                 multiple
                 onChange={handleFileChange}
             />
@@ -69,7 +71,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
                         {isDragOver ? 'Drop images here' : 'Drag & drop images here'}
                     </h3>
                     <p className="text-slate-400 text-sm">
-                        Supports JPEG, PNG, WebP • Max 5MB per file
+                        Supports JPEG, JIFF, PNG, WebP • Max 20MB per file
                     </p>
                 </div>
                 

@@ -45,7 +45,22 @@ export interface PromptSettings {
     targetPlatform: TargetPlatform;
     mode: 'general' | 'mockup';
     activeTemplateId?: string;
+    shadowOpacity: number;
 }
+
+export interface HistoryItem {
+    id: string;
+    prompt: string;
+    generatedImageUrl: string;
+    baseImage: {
+        base64Data: string;
+        mimeType: string;
+        name: string;
+    };
+    settings: PromptSettings;
+    timestamp: number;
+}
+
 
 export const DETAIL_LEVEL_MAP: Record<number, { label: string; keywords: string[]; platformBoosts: Partial<Record<TargetPlatform, string>> }> = {
     1: { 

@@ -6,7 +6,9 @@ import {
     User, Mountain, Smile, Package, Hexagon, Cpu, 
     BookTemplate, Box, Shirt, Smartphone, PenTool, Users, 
     Activity, Sun, Maximize, Target, Aperture, Monitor, Instagram, Camera,
-    Ban, PlusCircle, Brain, Sparkles, Globe, Layout, Bot, Eye, Loader2
+    Ban, PlusCircle, Brain, Sparkles, Globe, Layout, Bot, Eye, Loader2,
+    MoveDiagonal, ArrowDownCircle, Search, Layers, RotateCcw, ChevronUp,
+    Shadow
 } from 'lucide-react';
 
 interface ControlPanelProps {
@@ -56,6 +58,23 @@ const COMPOSITIONS = [
     { id: 'eye_level', label: 'Eye Level', icon: Smile },
 ];
 
+const CAMERA_ANGLES = [
+    { id: '45_deg', label: '45 Graus', icon: MoveDiagonal, prompt: '45-degree angle shot' },
+    { id: 'zenith', label: 'Ângulo Zenital', icon: ArrowDownCircle, prompt: 'zenith angle, top-down bird-eye view' },
+    { id: 'eye_level', label: 'Nível dos Olhos', icon: Eye, prompt: 'eye-level angle, realistic perspective' },
+    { id: 'macro', label: 'Close-up / Macro', icon: Search, prompt: 'ultra-detailed macro close-up shot' },
+    { id: 'transparency', label: 'Transparência', icon: Layers, prompt: 'transparency angle, ghosting effect, translucent layers' },
+    { id: 'flat_lay', label: 'Flat Lay', icon: Layout, prompt: 'flat lay photography, top-down view' },
+    { id: 'dutch', label: 'Holandês', icon: RotateCcw, prompt: 'dutch angle, tilted camera, dramatic diagonal' },
+    { id: 'low_angle', label: 'Contra-Plongée', icon: ChevronUp, prompt: 'low-angle shot, looking up, imposing perspective' },
+    { id: 'action', label: 'Ação', icon: Zap, prompt: 'dynamic action angle, high-energy shot' },
+];
+
+const SHADOW_EFFECTS = [
+    { id: 'contact', label: 'Sombra de Contato', icon: Box, prompt: 'contact shadow, soft ambient occlusion' },
+    { id: 'cast', label: 'Sombra Projetada', icon: MoveDiagonal, prompt: 'cast shadow, defined drop shadow' },
+];
+
 const TEMPLATES = [
     { id: 'character', label: 'Character', icon: User, prompt: 'Full body character design of [subject], detailed costume, dynamic pose, concept art', category: 'general' },
     { id: 'multi_pose', label: 'Studio Multi-Pose', icon: Users, prompt: 'Create a professional studio photo of [subject] with 100% facial fidelity and a dynamic pose. Shot from the hip up with a neutral gray studio background.', category: 'general' },
@@ -103,6 +122,13 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             basePrompt: templatePrompt,
             activeTemplateId: templateId
         });
+    };
+
+    const appendToPrompt = (text: string) => {
+        const current = settings.basePrompt || '';
+        const hasText = current.trim().length > 0;
+        const separator = hasText ? (current.trim().endsWith(',') ? ' ' : ', ') : '';
+        handleChange('basePrompt', current + separator + text);
     };
 
     const isAutoDetail = settings.detailLevel === 'auto';
@@ -190,6 +216,60 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                                 <span className="text-[8px] font-bold uppercase truncate w-full text-center leading-tight">{t.label}</span>
                             </button>
                         ))}
+                    </div>
+                </div>
+
+                {/* Ângulos de Câmera Section */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-slate-300 font-bold text-[10px] uppercase tracking-widest">
+                        <Camera size={14} className="text-violet-400"/>
+                        <span>Ângulos de Câmera (Add ao Prompt)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {CAMERA_ANGLES.map((angle) => (
+                            <button
+                                key={angle.id}
+                                onClick={() => appendToPrompt(angle.prompt)}
+                                className="flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-[9px] font-bold text-slate-300 hover:border-violet-500 hover:text-violet-400 hover:bg-violet-500/5 transition-all group"
+                            >
+                                <angle.icon size={12} className="text-slate-500 group-hover:text-violet-400 transition-colors" />
+                                <span className="uppercase truncate">{angle.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Efeitos de Sombra Section */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-slate-300 font-bold text-[10px] uppercase tracking-widest">
+                        <PlusCircle size={14} className="text-emerald-400"/>
+                        <span>Efeitos de Sombra (Add ao Prompt)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {SHADOW_EFFECTS.map((eff) => (
+                            <button
+                                key={eff.id}
+                                onClick={() => appendToPrompt(eff.prompt)}
+                                className="flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-[9px] font-bold text-slate-300 hover:border-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/5 transition-all group"
+                            >
+                                <eff.icon size={12} className="text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                                <span className="uppercase truncate">{eff.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    
+                    {/* Shadow Opacity Slider */}
+                    <div className="space-y-4 bg-slate-900/30 p-4 rounded-xl border border-slate-700/50 mt-2">
+                        <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-slate-300 font-bold uppercase flex items-center gap-2">Opacidade da Sombra</span>
+                            <span className="text-emerald-400 font-black">{settings.shadowOpacity}%</span>
+                        </div>
+                        <input 
+                            type="range" min="0" max="100" step="1" 
+                            value={settings.shadowOpacity}
+                            onChange={(e) => handleChange('shadowOpacity', parseInt(e.target.value))}
+                            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-emerald-500"
+                        />
                     </div>
                 </div>
 
